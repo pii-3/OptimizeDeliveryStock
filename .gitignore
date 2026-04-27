@@ -29,3 +29,6 @@ data/output/*.xlsx
 
 # Streamlit
 .streamlit/
+
+# 削除予定
+削除予定/

@@ -5,34 +5,18 @@
 
 ---
 
-## ファイル構成
+## フォルダ構成
 
 ```
-spec/               # 仕様書
-├── optimizer_spec.md
-├── app_spec.md
-└── charts_spec.md
-
-tests/              # テストコード
-├── conftest.py
-├── test_optimizer.py
-└── test_charts.py
-
+spec/       # 仕様書（モジュール構成・要件はここに記載）
+tests/      # テストコード
 data/
-├── input/          # 入力データ（Excel）
-└── output/         # 計算結果（Excel）
-
-notebooks/
-├── 入荷の最適化.ipynb       # 原版ノートブック（参考）
-└── visualization.ipynb    # グラフ試作用（使い捨て）
-
-app.py              # Streamlit UI（本体）
-optimizer.py        # 最適化ロジック（本体）
-charts.py           # グラフ関数（予定）
-
-MODEL.md            # 数学的仕様書
-requirements.txt    # 依存パッケージ
+├── input/  # 入力データ（Excel）
+└── output/ # 計算結果（Excel）
+notebooks/  # 探索・試作用（本体コードではない）
 ```
+
+詳細は `spec/architecture.md` を参照。
 
 ---
 
@@ -40,40 +24,102 @@ requirements.txt    # 依存パッケージ
 
 ### 仕様駆動開発（推奨）
 
-1. **spec/ に仕様を記述** — 要件を言語化（要件ID: C-1, O-1 など）
-2. **tests/ にテストコードを追加**（赤：テスト失敗）
-3. **実装コード（charts.py など）を追加**（緑：テスト合格）
-4. **リファクタリング・ドキュメント化**（黄：コード改善）
-5. **git commit で仕様番号を参照**
-   ```bash
-   git commit -m "feat: implement C-1 (spec/charts_spec.md)"
-   ```
+**基本原則**: 仕様 → テスト → 実装の順を守る。実装より先にテストを書くことで、仕様の曖昧さを早期に発見できる。
 
-### モデル変更時
+---
 
-1. **MODEL.md を更新** — 新しい式・制約を記述
-2. **optimizer.py を更新** — コードに実装、`[MODEL.md:セクション名]` コメント付け
-3. **git commit** — MODEL.md と optimizer.py を一緒にコミット
+#### ステップ 1: 仕様を記述する
 
-例:
+**自分でやること**: 要件の目的・入出力・表示内容を言語化し、要件IDを付与する。
+
+**Claudeへの指示例**:
+```
+spec/charts_spec.md に C-4 の要件を追加して。
+目的: ○○を可視化したい。
+入力: decision_variables DataFrame
+出力: matplotlib Figure
+表示内容: X軸は日付、Y軸は○○、折れ線グラフ
+```
+
+**確認**: 「これはテストできるか？」と自問する。曖昧な表現（"良い感じに"など）は修正する。
+
+---
+
+#### ステップ 2: テストを追加する（赤）
+
+**Claudeへの指示例**:
+```
+spec/charts_spec.md の C-4 に基づいて tests/test_charts.py にテストを追加して。
+実装はまだしないで。
+```
+
+**確認**:
 ```bash
-git commit -m "feat: add XXX constraint (MODEL.md + optimizer.py)"
+pytest tests/test_charts.py::test_C4_xxx -v
+# → FAILED になること（赤）
+```
+
+---
+
+#### ステップ 3: 実装する（緑）
+
+**Claudeへの指示例**:
+```
+spec/charts_spec.md の C-4 と tests/test_charts.py のテストを参照して、
+charts.py に plot_xxx() を実装して。
+```
+
+**確認**:
+```bash
+pytest tests/test_charts.py::test_C4_xxx -v
+# → PASSED になること（緑）
+```
+
+---
+
+#### ステップ 4: リファクタリング（黄）
+
+**Claudeへの指示例**:
+```
+charts.py の plot_xxx() をリファクタリングして。テストは変えないで。
+```
+または `/simplify` スラッシュコマンドを使う。
+
+**確認**:
+```bash
+pytest -v
+# → 全テストが引き続き PASSED
+```
+
+---
+
+#### ステップ 5: コミット
+
+**Claudeへの指示例**:
+```
+C-4 の実装が完了したのでコミットして。
+```
+
+**コミットメッセージの形式**:
+```bash
+git commit -m "feat: implement C-4 (spec/charts_spec.md)"
 ```
 
 ### グラフ・可視化追加時
 
 1. **spec/charts_spec.md に要件を記述** — UI、グラフ形式など
 2. **tests/test_charts.py にテストを追加**（赤）
-3. **notebooks/visualization.ipynb で試作** — `from charts import ...` でインポート
-4. **charts.py に関数化** — 良い形が決まったら切り出す（緑）
-5. **app.py に統合** — Streamlit で表示
-6. **git commit で仕様番号を参照**
+3. **charts.py に実装**（緑）
+4. **app.py に統合** — Streamlit で表示
+5. **git commit で仕様番号を参照**
 
-### Streamlit アプリ修正時
+### UI層の修正時
 
-1. **app.py を直接編集**
-2. **ローカルで動作確認** — `streamlit run app.py`
-3. **git commit**
+1. **spec/app_spec.md に要件を記述**（新規 or 既存要件の更新）
+2. **tests/test_app.py にテストを追加**（赤）
+3. **app.py を実装**（緑）
+4. **ローカルで動作確認** — 起動方法は `spec/architecture.md` を参照
+5. **git commit で仕様番号を参照**
 
 ### テスト実行
 
@@ -92,41 +138,33 @@ pytest -v
 
 ## ノートブックの役割
 
-- **notebooks/**: 探索・試作用のみ。本体コードではない
-- 試作完了後は削除するか、参考資料として放置
-- 削除しても `.gitignore` で git に追跡されない
+通常の開発フローには含まない。動作を手元で試したい時だけ使う。
+
+**Claudeへの指示例**:
+```
+○○を確認するためのノートブックを notebooks/ に作って。
+```
+
+作成後は自分で自由に編集・実行する。使い終わったら削除してよい（`.gitignore` で追跡されない）。
 
 ---
 
 ## 依存パッケージ
 
-**requirements.txt** から自動インストール:
-```bash
-pip install -r requirements.txt
-```
+パッケージ追加時は `requirements.txt` を更新し、Claudeに報告。
 
-パッケージ追加時は requirements.txt を更新し、Claudeに報告。
-
----
-
-## 起動方法
-
-```bash
-python -m streamlit run app.py
-```
-
-ブラウザ: `http://localhost:8501`
+起動方法・インストール手順は `spec/architecture.md` を参照。
 
 ---
 
 ## トラブルシューティング
 
 ### 最適解が見つからない場合
-- MODEL.md の制約を確認
+- `spec/optimizer_spec.md` の数学モデル・制約条件を確認
 - `optimizer.py` の制約ロジックを検証
 - ソルバーログ確認: `model.solve()` の `msg=1` に変更
 
 ### グラフがおかしい
-- `notebooks/visualization.ipynb` で再検証
-- `charts.py` の関数を修正
+- `charts.py` の関数を確認・修正
 - `app.py` で正しく呼び出されているか確認
+- 手元で試したい場合はノートブックを作成して検証
