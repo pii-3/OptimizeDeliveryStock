@@ -353,3 +353,62 @@ class TestO5_Baseline:
             for _, row in dv.iterrows()
         )
         assert abs(simple_baseline_result["total_cost"] - expected) < 0.01
+
+
+# ---------------------------------------------------------------------------
+# 要件 O-6: 発注数固定の最適化関数
+# ---------------------------------------------------------------------------
+
+class TestO6_FixedOrderOptimization:
+    """要件 O-6: 発注数固定の最適化関数
+
+    simple_input_data の期待する最適解:
+      小口の方が安い（配送費_ケース=100 < トラック単価/K_p）ため全量小口
+      x_small = 10 / 日、x_large = 0、n_trucks = 0
+      total_cost = 10 * 100 * 3 + 0 = 3000（在庫コスト = 0）
+    """
+
+    def test_O6_returns_dict(self, simple_fixed_order_result):
+        """最適化関数が辞書を返す"""
+        assert isinstance(simple_fixed_order_result, dict)
+
+    def test_O6_has_required_keys(self, simple_fixed_order_result):
+        """返り値に必要なキーが全て含まれる"""
+        assert set(simple_fixed_order_result.keys()) == {
+            "status", "total_cost", "cost_breakdown", "decision_variables", "trucks"
+        }
+
+    def test_O6_status_is_optimal(self, simple_fixed_order_result):
+        """最適解が見つかる"""
+        assert simple_fixed_order_result["status"] == "Optimal"
+
+    def test_O6_total_per_day_equals_xbar(self, simple_fixed_order_result, simple_input_data):
+        """各（日付×商品）の入荷数合計 == 入荷予定（x_bar）"""
+        dv = simple_fixed_order_result["decision_variables"]
+        ts = simple_input_data["time_series"].set_index(["商品コード", "日付"])
+        for _, row in dv.iterrows():
+            x_bar = ts.loc[(row["商品コード"], row["日付"]), "入荷予定"]
+            assert abs(row["入荷数合計"] - x_bar) < 0.01, \
+                f"{row['商品コード']} {row['日付']}: 入荷数合計 {row['入荷数合計']} != x_bar {x_bar}"
+
+    def test_O6_truck_capacity_respected(self, simple_fixed_order_result, simple_input_data):
+        """トラック容量制約: sum(x_large / K_p) <= n_trucks（全日）"""
+        dv = simple_fixed_order_result["decision_variables"]
+        trucks = simple_fixed_order_result["trucks"].set_index("日付")
+        K = simple_input_data["product_master"].set_index("商品コード")["CS/車両"]
+        for day, day_data in dv.groupby("日付"):
+            usage = sum(row["大口入荷数"] / K[row["商品コード"]] for _, row in day_data.iterrows())
+            assert usage <= trucks.loc[day, "トラック台数"] + 0.01, \
+                f"{day}: usage {usage} > n_trucks {trucks.loc[day, 'トラック台数']}"
+
+    def test_O6_cost_breakdown_has_required_keys(self, simple_fixed_order_result):
+        """cost_breakdown に 3 つの内訳キーが含まれる"""
+        cb = simple_fixed_order_result["cost_breakdown"]
+        assert isinstance(cb, dict)
+        assert set(cb.keys()) == {"delivery_small", "delivery_large", "holding"}
+
+    def test_O6_cost_breakdown_sums_to_total_cost(self, simple_fixed_order_result):
+        """内訳の合計が total_cost と一致する"""
+        cb = simple_fixed_order_result["cost_breakdown"]
+        expected = cb["delivery_small"] + cb["delivery_large"] + cb["holding"]
+        assert abs(simple_fixed_order_result["total_cost"] - expected) < 0.01

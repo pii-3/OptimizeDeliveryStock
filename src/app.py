@@ -1,7 +1,7 @@
 import io
 import pandas as pd
 import streamlit as st
-from optimizer import load_excel, optimize, calculate_baseline
+from optimizer import load_excel, optimize, optimize_fixed_order, calculate_baseline
 from charts import (
     plot_order_and_inventory_all,
     plot_order_and_inventory_by_product,
@@ -100,8 +100,9 @@ uploaded_file = st.file_uploader("Excelファイルをアップロード", type=
 if uploaded_file is not None:
     dfs = load_excel(uploaded_file)
 
-    col_baseline, col_optimize = st.columns(2)
-    btn_baseline = col_baseline.button("インプットデータで確認")
+    col_baseline, col_fixed, col_optimize = st.columns(3)
+    btn_baseline = col_baseline.button("すべて小口で配送")
+    btn_fixed = col_fixed.button("日付・商品ごとの発注数は固定で最適化")
     btn_optimize = col_optimize.button("最適化を実行")
 
     if btn_baseline:
@@ -113,6 +114,16 @@ if uploaded_file is not None:
                 dfs["inventory_init"],
             )
         _display_result(result, dfs["time_series"], file_prefix="baseline_result")
+
+    if btn_fixed:
+        with st.spinner("計算中..."):
+            result = optimize_fixed_order(
+                dfs["product_master"],
+                dfs["parameters"],
+                dfs["time_series"],
+                dfs["inventory_init"],
+            )
+        _display_result(result, dfs["time_series"], file_prefix="fixed_order_result")
 
     if btn_optimize:
         with st.spinner("計算中..."):

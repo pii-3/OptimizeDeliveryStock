@@ -134,6 +134,18 @@ def sample_trucks(sample_input_data):
     return result["trucks"]
 
 
+@pytest.fixture
+def simple_fixed_order_result(simple_input_data):
+    """simple_input_data の発注数固定最適化結果（O-6 用）"""
+    from optimizer import optimize_fixed_order
+    return optimize_fixed_order(
+        simple_input_data["product_master"],
+        simple_input_data["parameters"],
+        simple_input_data["time_series"],
+        simple_input_data["inventory_init"],
+    )
+
+
 @pytest.fixture(autouse=True)
 def close_all_figures():
     """各テスト後に全ての figure をクローズ"""

@@ -274,6 +274,39 @@ $$\sum_{\tau=1}^{d} (x_{p,\tau}^{(s)} + x_{p,\tau}^{(l)}) \le S_{p,d}^{cum} \qua
 
 ---
 
+## 要件 O-6: 発注数固定の最適化関数
+
+**目的**: 各（日付×商品）の入荷数合計を入荷予定（x_bar）に固定したまま、小口・大口の配送振り分けとトラック台数を最適化してコストを最小化する。前倒し・後ろ倒しなし。
+
+**関数**: `optimize_fixed_order(product_master_df, parameters_df, time_series_df, inventory_init_df) -> dict`
+
+**入力**: `optimize()` と同じ
+
+**処理フロー**:
+1. `_prepare_inputs()` で入力を成型
+2. PuLP でモデル構築・求解
+3. `_build_result()` で出力を成型
+
+**数学モデル**:
+
+意思決定変数: $x_{p,d}^{(s)}$、$x_{p,d}^{(l)}$、$n_d$（$I_{p,d}$ は x_bar から一意に決まるため変数不要）
+
+目的関数:
+$$\text{minimize} \quad \sum_{p,d} c_p^s \cdot x_{p,d}^{(s)} + \sum_{d} C^l \cdot n_d + \sum_{p,d} h_p \cdot I_{p,d}$$
+
+制約条件:
+1. **発注数固定**: $x_{p,d}^{(s)} + x_{p,d}^{(l)} = \bar{x}_{p,d} \quad (\forall p, d)$
+2. **トラック容量**: $\sum_p \frac{x_{p,d}^{(l)}}{K_p} \le n_d \quad (\forall d)$
+3. **在庫推移**: `optimize()` と同じ（非負制約なし — x_bar どおり入荷すると在庫が負になるケースも許容）
+
+**出力**: `optimize()` と同じ dict 構造（`status` は "Optimal" または非最適ステータス）
+
+**実装ファイル**: `optimizer.py:optimize_fixed_order()`
+
+**テスト**: `tests/test_optimizer.py::TestO6_*`
+
+---
+
 ## 実装制約
 
 - ソルバー: CBC（PuLP via PULP_CBC_CMD）

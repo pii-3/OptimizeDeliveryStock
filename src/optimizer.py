@@ -169,6 +169,82 @@ def optimize(
     }
 
 
+def optimize_fixed_order(
+    product_master_df: pd.DataFrame,
+    parameters_df: pd.DataFrame,
+    time_series_df: pd.DataFrame,
+    inventory_init_df: pd.DataFrame,
+) -> dict:
+    inp = _prepare_inputs(product_master_df, parameters_df, time_series_df, inventory_init_df)
+    products_list = inp["products_list"]
+    days_list = inp["days_list"]
+
+    # 在庫は x_bar 固定のため事前計算
+    inventory_values = {}
+    for p in products_list:
+        i_prev = inp["inventory_init"][p]
+        for d in days_list:
+            i_prev = i_prev + inp["x_bar"][(p, d)] - inp["shipping_forecast"][(p, d)]
+            inventory_values[(p, d)] = i_prev
+
+    holding_cost_total = sum(
+        inp["holding_cost"][p] * inventory_values[(p, d)]
+        for p in products_list for d in days_list
+    )
+
+    model = pulp.LpProblem("Fixed_Order_Optimization", pulp.LpMinimize)
+
+    x_small = pulp.LpVariable.dicts("x_small", (products_list, days_list), lowBound=0)
+    x_large = pulp.LpVariable.dicts("x_large", (products_list, days_list), lowBound=0)
+    n_trucks = pulp.LpVariable.dicts("n_trucks", days_list, lowBound=0, cat="Integer")
+
+    model += (
+        pulp.lpSum(inp["cost_per_case"][p] * x_small[p][d] for p in products_list for d in days_list)
+        + pulp.lpSum(inp["cost_per_truck"] * n_trucks[d] for d in days_list)
+        + holding_cost_total
+    )
+
+    for d in days_list:
+        model += (
+            pulp.lpSum(x_large[p][d] / inp["max_cases_per_truck"][p] for p in products_list)
+            <= n_trucks[d]
+        )
+        for p in products_list:
+            model += x_small[p][d] + x_large[p][d] == inp["x_bar"][(p, d)]
+
+    model.solve(pulp.PULP_CBC_CMD(msg=0))
+
+    status = pulp.LpStatus[model.status]
+    if model.status != pulp.LpStatusOptimal:
+        return {"status": status, "total_cost": None, "cost_breakdown": None, "decision_variables": None, "trucks": None}
+
+    x_small_values = {(p, d): x_small[p][d].value() for p in products_list for d in days_list}
+    x_large_values = {(p, d): x_large[p][d].value() for p in products_list for d in days_list}
+    n_trucks_values = {d: n_trucks[d].value() for d in days_list}
+
+    cost_breakdown = {
+        "delivery_small": sum(inp["cost_per_case"][p] * x_small_values[(p, d)] for p in products_list for d in days_list),
+        "delivery_large": sum(inp["cost_per_truck"] * n_trucks_values[d] for d in days_list),
+        "holding": holding_cost_total,
+    }
+
+    decision_variables_df, trucks_df = _build_result(
+        products_list, days_list,
+        x_small_values=x_small_values,
+        x_large_values=x_large_values,
+        n_trucks_values=n_trucks_values,
+        inventory_values=inventory_values,
+    )
+
+    return {
+        "status": status,
+        "total_cost": pulp.value(model.objective),
+        "cost_breakdown": cost_breakdown,
+        "decision_variables": decision_variables_df,
+        "trucks": trucks_df,
+    }
+
+
 def calculate_baseline(
     product_master_df: pd.DataFrame,
     parameters_df: pd.DataFrame,
