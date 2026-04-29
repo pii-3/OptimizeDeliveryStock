@@ -56,15 +56,11 @@ $$I_{p,d} = I_{p,d-1} + x_{p,d}^{(s)} + x_{p,d}^{(l)} - s_{p,d} \quad (d > 1)$$
 
 $$\sum_{p} \frac{x_{p,d}^{(l)}}{K_p} \le n_d \quad (d \in D)$$
 
-**3. 日次入荷合計 ≥ ベース入荷予定合計**
-
-$$\sum_{p} (x_{p,d}^{(s)} + x_{p,d}^{(l)}) \ge \sum_{p} \bar{x}_{p,d} \quad (d \in D)$$
-
-**4. 累積入荷数 ≥ 累積ベース入荷予定（前倒しのみ可能）**
+**3. 累積入荷数 ≥ 累積ベース入荷予定（前倒しのみ可能）**
 
 $$\sum_{\tau=1}^{d} (x_{p,\tau}^{(s)} + x_{p,\tau}^{(l)}) \ge \sum_{\tau=1}^{d} \bar{x}_{p,\tau} \quad (p \in P, d \in D)$$
 
-**5. 累積入荷数 ≤ 出荷可能数累計**
+**4. 累積入荷数 ≤ 出荷可能数累計**
 
 $$\sum_{\tau=1}^{d} (x_{p,\tau}^{(s)} + x_{p,\tau}^{(l)}) \le S_{p,d}^{cum} \quad (p \in P, d \in D)$$
 

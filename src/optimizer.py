@@ -118,11 +118,6 @@ def optimize(
             <= n_trucks[d]
         )
 
-        model += (
-            pulp.lpSum(x_small[p][d] + x_large[p][d] for p in products_list)
-            >= pulp.lpSum(inp["x_bar"][(p, d)] for p in products_list)
-        )
-
         for p in products_list:
             if d_idx == 0:
                 model += I[p][d] == (
