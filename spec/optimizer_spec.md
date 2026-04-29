@@ -156,6 +156,11 @@ $$\sum_{\tau=1}^{d} (x_{p,\tau}^{(s)} + x_{p,\tau}^{(l)}) \le S_{p,d}^{cum} \qua
 {
     "status": "Optimal" | "Not Solved" | ...,
     "total_cost": float | None,
+    "cost_breakdown": {          # コスト内訳（最適解なし時は None）
+        "delivery_small": float, # 配送コスト（小口）= Σ c_p^s × x_small
+        "delivery_large": float, # 配送コスト（大口）= Σ C^l × n_d
+        "holding": float,        # 在庫コスト = Σ h_p × I
+    } | None,
     "decision_variables": DataFrame | None,
     "trucks": DataFrame | None,
 }
@@ -253,6 +258,11 @@ $$\sum_{\tau=1}^{d} (x_{p,\tau}^{(s)} + x_{p,\tau}^{(l)}) \le S_{p,d}^{cum} \qua
 {
     "status": "Baseline",
     "total_cost": float,
+    "cost_breakdown": {
+        "delivery_small": float,
+        "delivery_large": float,  # ベースラインでは 0
+        "holding": float,
+    },
     "decision_variables": DataFrame,  # optimize() と同じスキーマ
     "trucks": DataFrame,              # トラック台数 = 0 for all dates
 }

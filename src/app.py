@@ -16,7 +16,14 @@ def _display_result(result, time_series_df, file_prefix="result"):
         st.error("最適解が見つかりませんでした。入力データを確認してください。")
         return
 
-    st.write(f"総コスト: **{result['total_cost']:,.0f}**")
+    st.write(f"総コスト: **¥{result['total_cost']:,.0f}**")
+
+    cb = result.get("cost_breakdown")
+    if cb is not None:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("配送コスト（小口）", f"¥{cb['delivery_small']:,.0f}")
+        c2.metric("配送コスト（大口）", f"¥{cb['delivery_large']:,.0f}")
+        c3.metric("在庫コスト", f"¥{cb['holding']:,.0f}")
 
     dv = result["decision_variables"]
     trucks = result["trucks"]

@@ -118,7 +118,7 @@ class TestO1_OptimizeFunctionStructure:
 
     def test_O1_has_required_keys(self, result):
         """返り値に必要なキーが全て含まれる"""
-        assert set(result.keys()) == {"status", "total_cost", "decision_variables", "trucks"}
+        assert set(result.keys()) == {"status", "total_cost", "cost_breakdown", "decision_variables", "trucks"}
 
     def test_O1_status_is_optimal(self, result):
         """最適解が見つかる"""
@@ -137,6 +137,18 @@ class TestO1_OptimizeFunctionStructure:
     def test_O1_trucks_columns(self, result):
         """trucks のカラムが仕様通り"""
         assert set(result["trucks"].columns) == {"日付", "トラック台数"}
+
+    def test_O1_cost_breakdown_has_required_keys(self, result):
+        """cost_breakdown に 3 つの内訳キーが含まれる"""
+        cb = result["cost_breakdown"]
+        assert isinstance(cb, dict)
+        assert set(cb.keys()) == {"delivery_small", "delivery_large", "holding"}
+
+    def test_O1_cost_breakdown_sums_to_total_cost(self, result):
+        """内訳の合計が total_cost と一致する"""
+        cb = result["cost_breakdown"]
+        expected = cb["delivery_small"] + cb["delivery_large"] + cb["holding"]
+        assert abs(result["total_cost"] - expected) < 0.01
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +261,7 @@ class TestO4_ErrorHandling:
         )
         assert result["status"] != "Optimal"
         assert result["total_cost"] is None
+        assert result["cost_breakdown"] is None
         assert result["decision_variables"] is None
         assert result["trucks"] is None
 
@@ -283,7 +296,7 @@ class TestO5_Baseline:
 
     def test_O5_has_required_keys(self, simple_baseline_result):
         """返り値に必要なキーが全て含まれる"""
-        assert set(simple_baseline_result.keys()) == {"status", "total_cost", "decision_variables", "trucks"}
+        assert set(simple_baseline_result.keys()) == {"status", "total_cost", "cost_breakdown", "decision_variables", "trucks"}
 
     def test_O5_x_large_is_zero(self, simple_baseline_result):
         """大口入荷数は常に0"""
@@ -317,6 +330,16 @@ class TestO5_Baseline:
                 expected = i_prev + row["小口入荷数"] - s
                 assert abs(row["在庫"] - expected) < 0.01, \
                     f"{p} {d}: expected {expected}, got {row['在庫']}"
+
+    def test_O5_cost_breakdown_delivery_large_is_zero(self, simple_baseline_result):
+        """ベースラインでは配送コスト（大口）= 0"""
+        assert simple_baseline_result["cost_breakdown"]["delivery_large"] == 0
+
+    def test_O5_cost_breakdown_sums_to_total_cost(self, simple_baseline_result):
+        """内訳の合計が total_cost と一致する"""
+        cb = simple_baseline_result["cost_breakdown"]
+        expected = cb["delivery_small"] + cb["delivery_large"] + cb["holding"]
+        assert abs(simple_baseline_result["total_cost"] - expected) < 0.01
 
     def test_O5_total_cost_calculation(self, simple_baseline_result, simple_input_data):
         """total_cost = Σ(配送費_ケース × x_small) + Σ(在庫コスト × 在庫)"""

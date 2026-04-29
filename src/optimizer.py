@@ -143,7 +143,7 @@ def optimize(
 
     status = pulp.LpStatus[model.status]
     if model.status != pulp.LpStatusOptimal:
-        return {"status": status, "total_cost": None, "decision_variables": None, "trucks": None}
+        return {"status": status, "total_cost": None, "cost_breakdown": None, "decision_variables": None, "trucks": None}
 
     decision_variables_df, trucks_df = _build_result(
         products_list,
@@ -154,9 +154,16 @@ def optimize(
         inventory_values={(p, d): I[p][d].value() for p in products_list for d in days_list},
     )
 
+    cost_breakdown = {
+        "delivery_small": sum(inp["cost_per_case"][p] * x_small[p][d].value() for p in products_list for d in days_list),
+        "delivery_large": sum(inp["cost_per_truck"] * n_trucks[d].value() for d in days_list),
+        "holding": sum(inp["holding_cost"][p] * I[p][d].value() for p in products_list for d in days_list),
+    }
+
     return {
         "status": status,
         "total_cost": pulp.value(model.objective),
+        "cost_breakdown": cost_breakdown,
         "decision_variables": decision_variables_df,
         "trucks": trucks_df,
     }
@@ -183,12 +190,12 @@ def calculate_baseline(
             i_prev = i_prev + x_small_values[(p, d)] - inp["shipping_forecast"][(p, d)]
             inventory_values[(p, d)] = i_prev
 
-    total_cost = sum(
-        inp["cost_per_case"][p] * x_small_values[(p, d)]
-        + inp["holding_cost"][p] * inventory_values[(p, d)]
-        for p in products_list
-        for d in days_list
-    )
+    cost_breakdown = {
+        "delivery_small": sum(inp["cost_per_case"][p] * x_small_values[(p, d)] for p in products_list for d in days_list),
+        "delivery_large": 0.0,
+        "holding": sum(inp["holding_cost"][p] * inventory_values[(p, d)] for p in products_list for d in days_list),
+    }
+    total_cost = cost_breakdown["delivery_small"] + cost_breakdown["holding"]
 
     decision_variables_df, trucks_df = _build_result(
         products_list, days_list,
@@ -201,6 +208,7 @@ def calculate_baseline(
     return {
         "status": "Baseline",
         "total_cost": total_cost,
+        "cost_breakdown": cost_breakdown,
         "decision_variables": decision_variables_df,
         "trucks": trucks_df,
     }
