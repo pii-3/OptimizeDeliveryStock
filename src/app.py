@@ -3,9 +3,7 @@ import pandas as pd
 import streamlit as st
 from optimizer import load_excel, optimize, calculate_baseline
 from charts import (
-    plot_inventory_all,
     plot_order_and_inventory_all,
-    plot_inventory_by_product,
     plot_order_and_inventory_by_product,
 )
 
@@ -49,56 +47,32 @@ def _display_result(result, time_series_df, file_prefix="result"):
 
     st.subheader("グラフ")
 
-    st.markdown("#### 全商品合計 在庫推移 (C-1)")
-    fig1 = plot_inventory_all(dv)
+    st.markdown("#### 全商品合計 入荷数・在庫推移 (C-1)")
+    fig1 = plot_order_and_inventory_all(dv)
     st.pyplot(fig1)
     buf1 = io.BytesIO()
     fig1.savefig(buf1, format="png", dpi=100)
-    st.download_button("PNG ダウンロード", buf1.getvalue(), f"{file_prefix}_inventory_all.png", "image/png")
+    st.download_button("PNG ダウンロード", buf1.getvalue(), f"{file_prefix}_order_and_inventory_all.png", "image/png")
     tbl1 = (
-        dv.groupby("日付")[["入荷数合計", "在庫"]]
-        .sum()
-        .rename(columns={"入荷数合計": "入荷数合計（全商品）", "在庫": "在庫（全商品）"})
-        .reset_index()
-    )
-    st.dataframe(tbl1, use_container_width=True)
-
-    st.markdown("#### 全商品合計 入荷数・在庫推移 (C-4)")
-    fig4 = plot_order_and_inventory_all(dv)
-    st.pyplot(fig4)
-    buf4 = io.BytesIO()
-    fig4.savefig(buf4, format="png", dpi=100)
-    st.download_button("PNG ダウンロード", buf4.getvalue(), f"{file_prefix}_order_and_inventory_all.png", "image/png")
-    tbl4 = (
         dv.groupby("日付")[["小口入荷数", "大口入荷数", "在庫"]]
         .sum()
         .rename(columns={"小口入荷数": "小口入荷数（全商品）", "大口入荷数": "大口入荷数（全商品）", "在庫": "在庫（全商品）"})
         .reset_index()
     )
-    st.dataframe(tbl4, use_container_width=True)
+    st.dataframe(tbl1, use_container_width=True)
 
-    st.markdown("#### 商品ごとの在庫推移 (C-2)")
-    fig2 = plot_inventory_by_product(dv)
+    st.markdown("#### 商品ごとの入荷数・在庫推移 (C-2)")
+    fig2 = plot_order_and_inventory_by_product(dv)
     st.pyplot(fig2)
     buf2 = io.BytesIO()
     fig2.savefig(buf2, format="png", dpi=100)
-    st.download_button("PNG ダウンロード", buf2.getvalue(), f"{file_prefix}_inventory_by_product.png", "image/png")
-    tbl2 = dv.pivot_table(index="日付", columns="商品コード", values="在庫").reset_index()
-    tbl2.columns.name = None
-    st.dataframe(tbl2, use_container_width=True)
-
-    st.markdown("#### 商品ごとの入荷数・在庫推移 (C-3)")
-    fig3 = plot_order_and_inventory_by_product(dv)
-    st.pyplot(fig3)
-    buf3 = io.BytesIO()
-    fig3.savefig(buf3, format="png", dpi=100)
-    st.download_button("PNG ダウンロード", buf3.getvalue(), f"{file_prefix}_order_and_inventory.png", "image/png")
-    tbl3 = dv.pivot_table(
+    st.download_button("PNG ダウンロード", buf2.getvalue(), f"{file_prefix}_order_and_inventory_by_product.png", "image/png")
+    tbl2 = dv.pivot_table(
         index="日付", columns="商品コード", values=["小口入荷数", "大口入荷数", "在庫"]
     )
-    tbl3.columns = [f"{col[1]}_{col[0]}" for col in tbl3.columns]
-    tbl3 = tbl3.reset_index()
-    st.dataframe(tbl3, use_container_width=True)
+    tbl2.columns = [f"{col[1]}_{col[0]}" for col in tbl2.columns]
+    tbl2 = tbl2.reset_index()
+    st.dataframe(tbl2, use_container_width=True)
 
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:

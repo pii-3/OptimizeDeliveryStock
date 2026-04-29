@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('Agg')  # テスト実行時はヘッドレスバックエンドを使用（Tk 不要）
+
 import pytest
 import pandas as pd
 from pathlib import Path
