@@ -9,7 +9,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const [filePrefix, setFilePrefix] = useState("result");
+  const [filePrefix, setFilePrefix] = useState("optimize");
 
   function handleUploaded(sid) {
     setSessionId(sid);
@@ -38,11 +38,12 @@ export default function App() {
         loading={loading}
         onResult={handleResult}
         onError={setError}
-        onLoadingChange={(v) => {
+        onLoadingChange={(v, prefix) => {
           setLoading(v);
           if (v) {
             setResult(null);
             setError(null);
+            if (prefix) setFilePrefix(prefix);
           }
         }}
       />

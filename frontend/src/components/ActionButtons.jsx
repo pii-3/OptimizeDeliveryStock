@@ -3,8 +3,8 @@ import { runBaseline, runFixedOrder, runOptimize } from "../api/client";
 export default function ActionButtons({ sessionId, loading, onResult, onError, onLoadingChange }) {
   const disabled = !sessionId || loading;
 
-  async function handle(apiFn, label) {
-    onLoadingChange(true);
+  async function handle(apiFn, prefix) {
+    onLoadingChange(true, prefix);
     onError(null);
     try {
       const result = await apiFn(sessionId);
@@ -12,7 +12,7 @@ export default function ActionButtons({ sessionId, loading, onResult, onError, o
     } catch (e) {
       onError(e.message);
     } finally {
-      onLoadingChange(false);
+      onLoadingChange(false, prefix);
     }
   }
 
