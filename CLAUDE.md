@@ -8,11 +8,8 @@
 ## フォルダ構成
 
 ```
-backend/    # FastAPI バックエンド
-frontend/   # React フロントエンド（Vite + JavaScript）
-src/        # 最適化ロジック（optimizer.py, charts.py）
 spec/       # 仕様書（モジュール構成・要件はここに記載）
-tests/      # テストコード（src/ のロジックが対象）
+tests/      # テストコード
 data/
 ├── input/  # 入力データ（Excel）
 └── output/ # 計算結果（Excel）
@@ -113,15 +110,14 @@ git commit -m "feat: implement C-4 (spec/charts_spec.md)"
 1. **spec/charts_spec.md に要件を記述** — UI、グラフ形式など
 2. **tests/test_charts.py にテストを追加**（赤）
 3. **charts.py に実装**（緑）
-4. **backend/routers/optimize.py で `_build_response()` に統合**
-5. **frontend の ResultsPanel.jsx に表示を追加**
-6. **git commit で仕様番号を参照**
+4. **app.py に統合** — Streamlit で表示
+5. **git commit で仕様番号を参照**
 
 ### UI層の修正時
 
 1. **spec/app_spec.md に要件を記述**（新規 or 既存要件の更新）
-2. **バックエンド変更が必要なら `backend/routers/optimize.py` を修正**
-3. **フロントエンドのコンポーネントを修正**（`frontend/src/components/` 以下）
+2. **tests/test_app.py にテストを追加**（赤）
+3. **app.py を実装**（緑）
 4. **ローカルで動作確認** — 起動方法は `spec/architecture.md` を参照
 5. **git commit で仕様番号を参照**
 
@@ -155,13 +151,7 @@ pytest -v
 
 ## 依存パッケージ
 
-| 対象 | ファイル | 用途 |
-|---|---|---|
-| バックエンド | `backend/requirements.txt` | FastAPI, uvicorn, optimizer 依存 |
-| テスト | `requirements.txt`（ルート） | pytest, optimizer 依存 |
-| フロントエンド | `frontend/package.json` | React, Vite |
-
-パッケージ追加時は対応する requirements ファイルを更新し、Claude に報告。
+パッケージ追加時は `requirements.txt` を更新し、Claudeに報告。
 
 起動方法・インストール手順は `spec/architecture.md` を参照。
 
@@ -175,12 +165,6 @@ pytest -v
 - ソルバーログ確認: `model.solve()` の `msg=1` に変更
 
 ### グラフがおかしい
-- `src/charts.py` の関数を確認・修正
-- `backend/routers/optimize.py` の `_build_response()` で正しく呼び出されているか確認
-- `http://localhost:8000/docs` の Swagger UI で API レスポンスの `chart_c1_base64` を直接確認
+- `charts.py` の関数を確認・修正
+- `app.py` で正しく呼び出されているか確認
 - 手元で試したい場合はノートブックを作成して検証
-
-### フロントエンドが API に繋がらない
-- バックエンドが `http://localhost:8000` で起動しているか確認
-- `frontend/vite.config.js` の proxy 設定（`/api` → `localhost:8000`）を確認
-- ブラウザの開発者ツールでネットワークエラーを確認
