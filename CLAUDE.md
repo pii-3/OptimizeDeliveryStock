@@ -2,6 +2,7 @@
 
 ## 概要
 このファイルはClaudeとの効率的な協働方法を記録しています。
+このリポジトリは**テスト駆動開発（TDD）の実践**として、発注最適化アプリをゼロから再構築します。
 
 ---
 
@@ -20,68 +21,80 @@ notebooks/  # 探索・試作用（本体コードではない）
 
 ---
 
-## 開発フロー
+## TDD の基本サイクル（Red → Green → Refactor）
 
-### 仕様駆動開発（推奨）
+**原則**: テストを先に書く。実装はテストを通すためだけに書く。動いたらリファクタリングする。
 
-**基本原則**: 仕様 → テスト → 実装の順を守る。実装より先にテストを書くことで、仕様の曖昧さを早期に発見できる。
+```
+Red    → テストを書く（この時点では必ず失敗する）
+Green  → テストが通る最小限の実装をする
+Refactor → コードをきれいにする（テストは変えない）
+```
+
+**なぜこの順番か**: 実装より先にテストを書くことで、仕様の曖昧さを早期に発見できる。テストが仕様の文書になる。
 
 ---
 
-#### ステップ 1: 仕様を記述する
+## 開発フロー
 
-**自分でやること**: 要件の目的・入出力・表示内容を言語化し、要件IDを付与する。
+### ステップ 1: 仕様を記述する
+
+**自分でやること**: 要件の目的・入出力を言語化し、要件IDを付与する。
 
 **Claudeへの指示例**:
 ```
-spec/charts_spec.md に C-4 の要件を追加して。
-目的: ○○を可視化したい。
-入力: decision_variables DataFrame
-出力: matplotlib Figure
-表示内容: X軸は日付、Y軸は○○、折れ線グラフ
+spec/optimizer_spec.md に O-1 の要件を追加して。
+目的: 発注コストを最小化する最適発注量を求めたい。
+入力: 需要予測 DataFrame（日付・SKU・予測需要量）
+出力: 発注量 DataFrame（日付・SKU・発注量）
+制約: 在庫が負にならない、発注量は整数
 ```
 
 **確認**: 「これはテストできるか？」と自問する。曖昧な表現（"良い感じに"など）は修正する。
 
 ---
 
-#### ステップ 2: テストを追加する（赤）
+### ステップ 2: テストを書く（Red）
 
 **Claudeへの指示例**:
 ```
-spec/charts_spec.md の C-4 に基づいて tests/test_charts.py にテストを追加して。
+spec/optimizer_spec.md の O-1 に基づいて tests/test_optimizer.py にテストを追加して。
 実装はまだしないで。
 ```
 
 **確認**:
 ```bash
-pytest tests/test_charts.py::test_C4_xxx -v
+pytest tests/test_optimizer.py::test_O1_xxx -v
 # → FAILED になること（赤）
 ```
 
+> テストが最初から通ってしまう場合、テストが実装を検証できていない可能性がある。
+
 ---
 
-#### ステップ 3: 実装する（緑）
+### ステップ 3: 実装する（Green）
 
 **Claudeへの指示例**:
 ```
-spec/charts_spec.md の C-4 と tests/test_charts.py のテストを参照して、
-charts.py に plot_xxx() を実装して。
+spec/optimizer_spec.md の O-1 と tests/test_optimizer.py のテストを参照して、
+optimizer.py に最小限の実装をして。
 ```
 
 **確認**:
 ```bash
-pytest tests/test_charts.py::test_C4_xxx -v
+pytest tests/test_optimizer.py::test_O1_xxx -v
 # → PASSED になること（緑）
 ```
 
+> 「最小限」が重要。テストを通すためだけに書く。きれいにするのは次のステップ。
+
 ---
 
-#### ステップ 4: リファクタリング（黄）
+### ステップ 4: リファクタリングする（Refactor）
 
 **Claudeへの指示例**:
 ```
-charts.py の plot_xxx() をリファクタリングして。テストは変えないで。
+optimizer.py の O-1 実装をリファクタリングして。テストは変えないで。
 ```
 または `/simplify` スラッシュコマンドを使う。
 
@@ -93,42 +106,39 @@ pytest -v
 
 ---
 
-#### ステップ 5: コミット
-
-**Claudeへの指示例**:
-```
-C-4 の実装が完了したのでコミットして。
-```
+### ステップ 5: コミット
 
 **コミットメッセージの形式**:
 ```bash
-git commit -m "feat: implement C-4 (spec/charts_spec.md)"
+git commit -m "feat: implement O-1 (spec/optimizer_spec.md)"
 ```
 
-### グラフ・可視化追加時
+---
 
-1. **spec/charts_spec.md に要件を記述** — UI、グラフ形式など
-2. **tests/test_charts.py にテストを追加**（赤）
-3. **charts.py に実装**（緑）
-4. **app.py に統合** — Streamlit で表示
-5. **git commit で仕様番号を参照**
+## 実装の進め方（ゼロから始める場合）
 
-### UI層の修正時
+ドメインロジック（計算・最適化）を先に固め、UIは後から載せる。
 
-1. **spec/app_spec.md に要件を記述**（新規 or 既存要件の更新）
-2. **tests/test_app.py にテストを追加**（赤）
-3. **app.py を実装**（緑）
-4. **ローカルで動作確認** — 起動方法は `spec/architecture.md` を参照
-5. **git commit で仕様番号を参照**
+```
+1. データ読み込み・前処理
+2. 最適化ロジック（コア）
+3. 結果の集計・整形
+4. グラフ・可視化
+5. UI（Streamlit）
+```
 
-### テスト実行
+各レイヤーをTDDで積み上げていく。UIのテストは後回しでよい。
+
+---
+
+## テスト実行
 
 ```bash
 # 全テスト実行
 pytest
 
-# 特定の要件テスト
-pytest tests/test_charts.py::TestC1_InventoryAllChart
+# 特定のテスト
+pytest tests/test_optimizer.py::TestO1_BasicOptimization -v
 
 # 詳細表示
 pytest -v
@@ -159,12 +169,14 @@ pytest -v
 
 ## トラブルシューティング
 
-### 最適解が見つからない場合
-- `spec/optimizer_spec.md` の数学モデル・制約条件を確認
-- `optimizer.py` の制約ロジックを検証
-- ソルバーログ確認: `model.solve()` の `msg=1` に変更
+### テストが思ったように失敗しない（Red にならない）
+- テストの入力データが実装と無関係になっていないか確認
+- モックを使いすぎて実際の挙動を検証できていないか確認
 
-### グラフがおかしい
-- `charts.py` の関数を確認・修正
-- `app.py` で正しく呼び出されているか確認
-- 手元で試したい場合はノートブックを作成して検証
+### テストが通らない（Green にならない）
+- まず最小限の実装で通すことを優先する（きれいさは後）
+- 失敗メッセージを読んで、何が期待値と違うかを確認
+
+### リファクタリングでテストが壊れた
+- テストが実装の詳細（内部構造）に依存していないか確認
+- テストは「振る舞い」を検証するものであるべき
