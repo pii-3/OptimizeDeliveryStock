@@ -195,6 +195,52 @@ $$\sum_{\tau=1}^{d} (x_{p,\tau}^{(s)} + x_{p,\tau}^{(l)}) \le S_{p,d}^{cum} \qua
 
 ---
 
+### テスト要件（O-2）
+
+> `load_excel` の責務は「4シートを読んで dict に入れること」のみ。
+> カラム名の検証は `_prepare_inputs` に任せる（最適化モデルが必要とするカラムは
+> そこで変わりにくいため、検証の置き場として適切）。
+
+#### fixture: `sample_excel` （conftest.py に定義）
+
+テスト用の最小限 Excel ファイルを一時ディレクトリに作成して返す。
+
+#### test_O2_1_returns_four_dataframes
+
+**目的**: 正常系。4シートが正しいキーで読み込まれること。
+
+**テストデータ**: `sample_excel` fixture
+
+**検証**:
+- 返り値の型が `dict` である
+- キーが `{"product_master", "parameters", "time_series", "inventory_init"}` と一致する
+- 各値が `pd.DataFrame` である
+
+---
+
+#### test_O2_2_missing_sheet_raises_error
+
+**目的**: エラー系。必須シートが1つ欠けていたら例外を送出すること。
+
+**テストデータ**: `前日末在庫` シートだけ含まない Excel ファイルを `tmp_path` に作成する。
+
+**検証**:
+- `load_excel()` を呼ぶと `ValueError`（またはサブクラス）が送出される
+- エラーメッセージに欠けているシート名（`"前日末在庫"`）が含まれる
+
+---
+
+#### test_O2_3_file_not_found_raises_error
+
+**目的**: エラー系。存在しないパスを渡したら `FileNotFoundError` が送出されること。
+
+**テストデータ**: 存在しないパス（例: `tmp_path / "no_such_file.xlsx"`）
+
+**検証**:
+- `load_excel()` を呼ぶと `FileNotFoundError` が送出される
+
+---
+
 ## 要件 O-3: 制約条件の正確性
 
 ### O-3-1: 在庫推移制約
