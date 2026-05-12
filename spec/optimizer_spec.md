@@ -102,6 +102,68 @@ $$\sum_{\tau=1}^{d} (x_{p,\tau}^{(s)} + x_{p,\tau}^{(l)}) \le S_{p,d}^{cum} \qua
 
 ---
 
+### テスト要件（_prepare_inputs）
+
+> `_prepare_inputs` はプライベート関数だが、`optimize` と `calculate_baseline` の両方から
+> 呼ばれる中核処理なので直接テストする。カラム検証もここで行う（O-2 では行わない）。
+>
+> fixture は `tests/conftest.py` の `sample_dfs` を使う。
+> 2商品（A・B）× 2日付で構成し、ソート検証のため入力は意図的に逆順にしてある。
+
+#### test_PI_1_products_and_days_are_sorted
+
+**目的**: 商品コードリストと日付リストがそれぞれ昇順にソートされていること。
+
+**検証**:
+- `result["products_list"] == ["A", "B"]`
+- `result["days_list"] == [Timestamp("2024-01-01"), Timestamp("2024-01-02")]`
+
+---
+
+#### test_PI_2_costs_extracted_correctly
+
+**目的**: コスト関連パラメータが正しく抽出・変換されていること。
+
+**検証**:
+- `result["holding_cost"] == {"A": 1.0, "B": 2.0}`
+- `result["cost_per_case"] == {"A": 100.0, "B": 200.0}`
+- `result["cost_per_truck"] == 30000`
+- `result["max_cases_per_truck"] == {"A": 50, "B": 40}`
+
+---
+
+#### test_PI_3_time_series_keyed_by_product_date
+
+**目的**: 時系列データが `(商品コード, 日付)` のタプルをキーとした dict に変換されていること。
+
+**検証**:
+- `result["x_bar"][("A", Timestamp("2024-01-01"))] == 10`
+- `result["shipping_forecast"][("B", Timestamp("2024-01-02"))] == 2`
+- `result["cumulative_shippable_qty"][("A", Timestamp("2024-01-02"))] == 15`
+
+---
+
+#### test_PI_4_inventory_init_keyed_by_product
+
+**目的**: 初期在庫が商品コードをキーとした dict に変換されていること。
+
+**検証**:
+- `result["inventory_init"] == {"A": 5, "B": 3}`
+
+---
+
+#### test_PI_5_missing_column_raises_error
+
+**目的**: カラム検証。必須カラムが欠けていると `ValueError` を送出すること。
+
+**テストデータ**: `在庫コスト` カラムを除いた `product_master` を渡す。
+
+**検証**:
+- `ValueError` が送出される
+- エラーメッセージに `"在庫コスト"` が含まれる
+
+---
+
 ### `_build_result()` — 出力成型
 
 **関数**: `_build_result(products_list, days_list, x_small_values, x_large_values, n_trucks_values, inventory_values) -> tuple[DataFrame, DataFrame]`

@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from optimizer import load_excel
+from optimizer import load_excel, _prepare_inputs
 
 
 # ── O-2: Excel ローダー ────────────────────────────────────────────
@@ -32,3 +32,44 @@ def test_O2_3_file_not_found_raises_error(tmp_path):
 
     with pytest.raises(FileNotFoundError):
         load_excel(path)
+
+
+# ── _prepare_inputs ────────────────────────────────────────────────
+
+
+def test_PI_1_products_and_days_are_sorted(sample_dfs):
+    result = _prepare_inputs(*sample_dfs)
+
+    assert result["products_list"] == ["A", "B"]
+    assert result["days_list"] == [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]
+
+
+def test_PI_2_costs_extracted_correctly(sample_dfs):
+    result = _prepare_inputs(*sample_dfs)
+
+    assert result["holding_cost"] == {"A": 1.0, "B": 2.0}
+    assert result["cost_per_case"] == {"A": 100.0, "B": 200.0}
+    assert result["cost_per_truck"] == 30000
+    assert result["max_cases_per_truck"] == {"A": 50, "B": 40}
+
+
+def test_PI_3_time_series_keyed_by_product_date(sample_dfs):
+    result = _prepare_inputs(*sample_dfs)
+
+    assert result["x_bar"][("A", pd.Timestamp("2024-01-01"))] == 10
+    assert result["shipping_forecast"][("B", pd.Timestamp("2024-01-02"))] == 2
+    assert result["cumulative_shippable_qty"][("A", pd.Timestamp("2024-01-02"))] == 15
+
+
+def test_PI_4_inventory_init_keyed_by_product(sample_dfs):
+    result = _prepare_inputs(*sample_dfs)
+
+    assert result["inventory_init"] == {"A": 5, "B": 3}
+
+
+def test_PI_5_missing_column_raises_error(sample_dfs):
+    product_master, parameters, time_series, inventory_init = sample_dfs
+    bad_product_master = product_master.drop(columns=["在庫コスト"])
+
+    with pytest.raises(ValueError, match="在庫コスト"):
+        _prepare_inputs(bad_product_master, parameters, time_series, inventory_init)
