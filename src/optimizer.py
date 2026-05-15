@@ -237,7 +237,7 @@ def optimize_fixed_order(product_master_df, parameters_df, time_series_df, inven
 
 
 def load_excel(excel_path):
-    with pd.ExcelFile(Path(excel_path)) as xlsx:
+    with pd.ExcelFile(excel_path) as xlsx:
         for sheet_name in SHEET_NAMES:
             if sheet_name not in xlsx.sheet_names:
                 raise ValueError(f"必須シートがありません: {sheet_name}")
