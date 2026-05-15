@@ -192,3 +192,71 @@ def test_O1_5_optimal_cost_value(sample_dfs):
     result = optimize(*sample_dfs)
 
     assert result["total_cost"] == pytest.approx(3737.0)
+
+
+# ── O-3: 制約条件の正確性 ─────────────────────────────────────────
+
+
+@pytest.fixture
+def dfs_forcing_trucks():
+    # ケース単価 500 >> トラック単価 100/5=20 → 最適解は大口入荷を選ぶ
+    return (
+        pd.DataFrame({"商品コード": ["T"], "在庫コスト": [0.0], "配送費_ケース": [500.0], "CS/車両": [5]}),
+        pd.DataFrame({"項目": ["配送費_車両"], "数量": [100]}),
+        pd.DataFrame({"商品コード": ["T"], "日付": [pd.Timestamp("2024-01-01")],
+                      "入荷予定": [10], "出荷予測": [0], "出荷可能数累計": [10]}),
+        pd.DataFrame({"商品コード": ["T"], "前日末在庫": [0]}),
+    )
+
+
+def test_O3_1_inventory_transition(sample_dfs):
+    product_master, parameters, time_series, inventory_init = sample_dfs
+    result = optimize(product_master, parameters, time_series, inventory_init)
+    dv = result["decision_variables"]
+
+    shipping = time_series.set_index(["商品コード", "日付"])["出荷予測"].to_dict()
+    init_inv = inventory_init.set_index("商品コード")["前日末在庫"].to_dict()
+    days = sorted(time_series["日付"].unique())
+    products = sorted(time_series["商品コード"].unique())
+
+    for p in products:
+        prev = init_inv[p]
+        for d in days:
+            row = dv[(dv["商品コード"] == p) & (dv["日付"] == d)].iloc[0]
+            expected = prev + row["入荷数合計"] - shipping[(p, d)]
+            assert row["在庫"] == pytest.approx(expected, abs=1e-6)
+            prev = row["在庫"]
+
+
+def test_O3_2_truck_capacity(dfs_forcing_trucks):
+    result = optimize(*dfs_forcing_trucks)
+    dv = result["decision_variables"]
+    trucks = result["trucks"]
+
+    d = pd.Timestamp("2024-01-01")
+    n = trucks.loc[trucks["日付"] == d, "トラック台数"].values[0]
+    x_large = dv.loc[(dv["日付"] == d) & (dv["商品コード"] == "T"), "大口入荷数"].values[0]
+
+    assert x_large > 0  # 安いトラックを使うはず
+    assert x_large / 5 <= n + 1e-6  # トラック容量制約
+
+
+def test_O3_3_cumulative_constraints(sample_dfs):
+    product_master, parameters, time_series, inventory_init = sample_dfs
+    result = optimize(product_master, parameters, time_series, inventory_init)
+    dv = result["decision_variables"]
+
+    x_bar = time_series.set_index(["商品コード", "日付"])["入荷予定"].to_dict()
+    cum_shippable = time_series.set_index(["商品コード", "日付"])["出荷可能数累計"].to_dict()
+    days = sorted(time_series["日付"].unique())
+    products = sorted(time_series["商品コード"].unique())
+
+    for p in products:
+        cum_arrival = 0.0
+        cum_x_bar_total = 0.0
+        for d in days:
+            row = dv[(dv["商品コード"] == p) & (dv["日付"] == d)].iloc[0]
+            cum_arrival += row["入荷数合計"]
+            cum_x_bar_total += x_bar[(p, d)]
+            assert cum_arrival >= cum_x_bar_total - 1e-6
+            assert cum_arrival <= cum_shippable[(p, d)] + 1e-6
