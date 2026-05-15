@@ -241,6 +241,42 @@ def test_O3_2_truck_capacity(dfs_forcing_trucks):
     assert x_large / 5 <= n + 1e-6  # トラック容量制約
 
 
+# ── O-4: エラーハンドリング ────────────────────────────────────────
+
+
+@pytest.fixture
+def dfs_infeasible():
+    # x_bar=10 > cumulative_shippable=5 → 累積制約が矛盾して実行不可能
+    return (
+        pd.DataFrame({"商品コード": ["X"], "在庫コスト": [1.0], "配送費_ケース": [100.0], "CS/車両": [10]}),
+        pd.DataFrame({"項目": ["配送費_車両"], "数量": [1000]}),
+        pd.DataFrame({"商品コード": ["X"], "日付": [pd.Timestamp("2024-01-01")],
+                      "入荷予定": [10], "出荷予測": [5], "出荷可能数累計": [5]}),
+        pd.DataFrame({"商品コード": ["X"], "前日末在庫": [0]}),
+    )
+
+
+def test_O4_1_no_solution(dfs_infeasible):
+    result = optimize(*dfs_infeasible)
+
+    assert result["status"] != "Optimal"
+    assert result["total_cost"] is None
+    assert result["cost_breakdown"] is None
+    assert result["decision_variables"] is None
+    assert result["trucks"] is None
+
+
+def test_O4_2_invalid_input(sample_dfs):
+    product_master, parameters, time_series, inventory_init = sample_dfs
+    bad_product_master = product_master.drop(columns=["配送費_ケース"])
+
+    with pytest.raises(ValueError, match="配送費_ケース"):
+        optimize(bad_product_master, parameters, time_series, inventory_init)
+
+
+# ── O-3: 制約条件の正確性 ─────────────────────────────────────────
+
+
 def test_O3_3_cumulative_constraints(sample_dfs):
     product_master, parameters, time_series, inventory_init = sample_dfs
     result = optimize(product_master, parameters, time_series, inventory_init)
