@@ -140,6 +140,40 @@ def optimize(product_master_df, parameters_df, time_series_df, inventory_init_df
     }
 
 
+def calculate_baseline(product_master_df, parameters_df, time_series_df, inventory_init_df):
+    inp = _prepare_inputs(product_master_df, parameters_df, time_series_df, inventory_init_df)
+    P = inp["products_list"]
+    D = inp["days_list"]
+
+    x_small_val = {(p, d): float(inp["x_bar"][(p, d)]) for p in P for d in D}
+    x_large_val = {(p, d): 0.0 for p in P for d in D}
+    n_trucks_val = {d: 0.0 for d in D}
+
+    inv_val = {}
+    for p in P:
+        prev = inp["inventory_init"][p]
+        for d in D:
+            inv_val[(p, d)] = prev + x_small_val[(p, d)] - inp["shipping_forecast"][(p, d)]
+            prev = inv_val[(p, d)]
+
+    delivery_small = sum(inp["cost_per_case"][p] * x_small_val[(p, d)] for p in P for d in D)
+    holding = sum(inp["holding_cost"][p] * inv_val[(p, d)] for p in P for d in D)
+
+    decision_variables_df, trucks_df = _build_result(P, D, x_small_val, x_large_val, n_trucks_val, inv_val)
+
+    return {
+        "status": "Baseline",
+        "total_cost": float(delivery_small + holding),
+        "cost_breakdown": {
+            "delivery_small": float(delivery_small),
+            "delivery_large": 0.0,
+            "holding": float(holding),
+        },
+        "decision_variables": decision_variables_df,
+        "trucks": trucks_df,
+    }
+
+
 def load_excel(excel_path):
     with pd.ExcelFile(Path(excel_path)) as xlsx:
         for sheet_name in SHEET_NAMES:

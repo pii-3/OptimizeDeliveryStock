@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from optimizer import load_excel, _prepare_inputs, _build_result, optimize
+from optimizer import load_excel, _prepare_inputs, _build_result, optimize, calculate_baseline
 
 
 # ── O-2: Excel ローダー ────────────────────────────────────────────
@@ -296,3 +296,49 @@ def test_O3_3_cumulative_constraints(sample_dfs):
             cum_x_bar_total += x_bar[(p, d)]
             assert cum_arrival >= cum_x_bar_total - 1e-6
             assert cum_arrival <= cum_shippable[(p, d)] + 1e-6
+
+
+# ── O-5: calculate_baseline ───────────────────────────────────────
+
+
+def test_O5_1_returns_baseline_status(sample_dfs):
+    result = calculate_baseline(*sample_dfs)
+
+    assert result["status"] == "Baseline"
+
+
+def test_O5_2_output_schema(sample_dfs):
+    result = calculate_baseline(*sample_dfs)
+
+    assert set(result.keys()) == {"status", "total_cost", "cost_breakdown", "decision_variables", "trucks"}
+    assert isinstance(result["total_cost"], float)
+    assert set(result["cost_breakdown"].keys()) == {"delivery_small", "delivery_large", "holding"}
+    assert isinstance(result["decision_variables"], pd.DataFrame)
+    assert isinstance(result["trucks"], pd.DataFrame)
+
+
+def test_O5_3_no_trucks_no_large(sample_dfs):
+    result = calculate_baseline(*sample_dfs)
+    dv = result["decision_variables"]
+    trucks = result["trucks"]
+
+    assert (dv["大口入荷数"] == 0).all()
+    assert (trucks["トラック台数"] == 0).all()
+
+
+def test_O5_4_arrival_equals_x_bar(sample_dfs):
+    product_master, parameters, time_series, inventory_init = sample_dfs
+    result = calculate_baseline(product_master, parameters, time_series, inventory_init)
+    dv = result["decision_variables"]
+
+    x_bar = time_series.set_index(["商品コード", "日付"])["入荷予定"].to_dict()
+    for _, row in dv.iterrows():
+        assert row["小口入荷数"] == pytest.approx(x_bar[(row["商品コード"], row["日付"])])
+
+
+def test_O5_5_cost_value(sample_dfs):
+    result = calculate_baseline(*sample_dfs)
+
+    # delivery_large = 0、total = delivery_small(3700) + holding(37) = 3737.0
+    assert result["cost_breakdown"]["delivery_large"] == pytest.approx(0.0)
+    assert result["total_cost"] == pytest.approx(3737.0)
