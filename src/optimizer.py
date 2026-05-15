@@ -51,6 +51,31 @@ def _prepare_inputs(product_master_df, parameters_df, time_series_df, inventory_
     }
 
 
+def _build_result(products_list, days_list, x_small_values, x_large_values, n_trucks_values, inventory_values):
+    rows = []
+    for d in days_list:
+        for p in products_list:
+            small = x_small_values[(p, d)]
+            large = x_large_values[(p, d)]
+            rows.append({
+                "日付": d,
+                "商品コード": p,
+                "小口入荷数": small,
+                "大口入荷数": large,
+                "入荷数合計": small + large,
+                "在庫": inventory_values[(p, d)],
+            })
+
+    decision_variables_df = pd.DataFrame(rows, columns=["日付", "商品コード", "小口入荷数", "大口入荷数", "入荷数合計", "在庫"])
+
+    trucks_df = pd.DataFrame([
+        {"日付": d, "トラック台数": int(round(n_trucks_values[d]))}
+        for d in days_list
+    ], columns=["日付", "トラック台数"])
+
+    return decision_variables_df, trucks_df
+
+
 def load_excel(excel_path):
     with pd.ExcelFile(Path(excel_path)) as xlsx:
         for sheet_name in SHEET_NAMES:

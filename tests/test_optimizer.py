@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from optimizer import load_excel, _prepare_inputs
+from optimizer import load_excel, _prepare_inputs, _build_result
 
 
 # ── O-2: Excel ローダー ────────────────────────────────────────────
@@ -73,3 +73,82 @@ def test_PI_5_missing_column_raises_error(sample_dfs):
 
     with pytest.raises(ValueError, match="在庫コスト"):
         _prepare_inputs(bad_product_master, parameters, time_series, inventory_init)
+
+
+# ── _build_result ──────────────────────────────────────────────────
+
+
+@pytest.fixture
+def sample_br_inputs():
+    products_list = ["A", "B"]
+    days_list = [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]
+    x_small = {
+        ("A", pd.Timestamp("2024-01-01")): 5.0,
+        ("A", pd.Timestamp("2024-01-02")): 3.0,
+        ("B", pd.Timestamp("2024-01-01")): 8.0,
+        ("B", pd.Timestamp("2024-01-02")): 2.0,
+    }
+    x_large = {
+        ("A", pd.Timestamp("2024-01-01")): 0.0,
+        ("A", pd.Timestamp("2024-01-02")): 10.0,
+        ("B", pd.Timestamp("2024-01-01")): 0.0,
+        ("B", pd.Timestamp("2024-01-02")): 5.0,
+    }
+    n_trucks = {
+        pd.Timestamp("2024-01-01"): 0.0,
+        pd.Timestamp("2024-01-02"): 2.0,
+    }
+    inventory = {
+        ("A", pd.Timestamp("2024-01-01")): 10.0,
+        ("A", pd.Timestamp("2024-01-02")): 7.0,
+        ("B", pd.Timestamp("2024-01-01")): 12.0,
+        ("B", pd.Timestamp("2024-01-02")): 9.0,
+    }
+    return products_list, days_list, x_small, x_large, n_trucks, inventory
+
+
+def test_BR_1_returns_two_dataframes(sample_br_inputs):
+    result = _build_result(*sample_br_inputs)
+
+    assert isinstance(result, tuple)
+    assert len(result) == 2
+    decision_variables_df, trucks_df = result
+    assert isinstance(decision_variables_df, pd.DataFrame)
+    assert isinstance(trucks_df, pd.DataFrame)
+
+
+def test_BR_2_decision_variables_schema(sample_br_inputs):
+    decision_variables_df, _ = _build_result(*sample_br_inputs)
+
+    assert list(decision_variables_df.columns) == ["日付", "商品コード", "小口入荷数", "大口入荷数", "入荷数合計", "在庫"]
+    assert len(decision_variables_df) == 4  # 2 products × 2 days
+
+
+def test_BR_3_total_arrival_equals_sum_of_small_and_large(sample_br_inputs):
+    decision_variables_df, _ = _build_result(*sample_br_inputs)
+
+    for _, row in decision_variables_df.iterrows():
+        assert row["入荷数合計"] == pytest.approx(row["小口入荷数"] + row["大口入荷数"])
+
+
+def test_BR_4_specific_values_in_decision_variables(sample_br_inputs):
+    decision_variables_df, _ = _build_result(*sample_br_inputs)
+
+    row = decision_variables_df[
+        (decision_variables_df["日付"] == pd.Timestamp("2024-01-02")) &
+        (decision_variables_df["商品コード"] == "A")
+    ].iloc[0]
+
+    assert row["小口入荷数"] == pytest.approx(3.0)
+    assert row["大口入荷数"] == pytest.approx(10.0)
+    assert row["入荷数合計"] == pytest.approx(13.0)
+    assert row["在庫"] == pytest.approx(7.0)
+
+
+def test_BR_5_trucks_schema_and_values(sample_br_inputs):
+    _, trucks_df = _build_result(*sample_br_inputs)
+
+    assert list(trucks_df.columns) == ["日付", "トラック台数"]
+    assert len(trucks_df) == 2  # 2 days
+    assert pd.api.types.is_integer_dtype(trucks_df["トラック台数"])
+    assert trucks_df.loc[trucks_df["日付"] == pd.Timestamp("2024-01-02"), "トラック台数"].values[0] == 2
