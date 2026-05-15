@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from optimizer import load_excel, _prepare_inputs, _build_result
+from optimizer import load_excel, _prepare_inputs, _build_result, optimize
 
 
 # ── O-2: Excel ローダー ────────────────────────────────────────────
@@ -152,3 +152,43 @@ def test_BR_5_trucks_schema_and_values(sample_br_inputs):
     assert len(trucks_df) == 2  # 2 days
     assert pd.api.types.is_integer_dtype(trucks_df["トラック台数"])
     assert trucks_df.loc[trucks_df["日付"] == pd.Timestamp("2024-01-02"), "トラック台数"].values[0] == 2
+
+
+# ── O-1: optimize ─────────────────────────────────────────────────
+
+
+def test_O1_1_returns_optimal_status(sample_dfs):
+    result = optimize(*sample_dfs)
+
+    assert result["status"] == "Optimal"
+
+
+def test_O1_2_output_schema(sample_dfs):
+    result = optimize(*sample_dfs)
+
+    assert set(result.keys()) == {"status", "total_cost", "cost_breakdown", "decision_variables", "trucks"}
+    assert isinstance(result["total_cost"], float)
+    assert set(result["cost_breakdown"].keys()) == {"delivery_small", "delivery_large", "holding"}
+    assert isinstance(result["decision_variables"], pd.DataFrame)
+    assert isinstance(result["trucks"], pd.DataFrame)
+
+
+def test_O1_3_cost_breakdown_sums_to_total(sample_dfs):
+    result = optimize(*sample_dfs)
+
+    breakdown = result["cost_breakdown"]
+    expected = breakdown["delivery_small"] + breakdown["delivery_large"] + breakdown["holding"]
+    assert result["total_cost"] == pytest.approx(expected)
+
+
+def test_O1_4_inventory_non_negative(sample_dfs):
+    result = optimize(*sample_dfs)
+
+    assert (result["decision_variables"]["在庫"] >= -1e-6).all()
+
+
+def test_O1_5_optimal_cost_value(sample_dfs):
+    # sample_dfs では累積制約により全入荷が x_bar に固定 → total_cost = 3737.0
+    result = optimize(*sample_dfs)
+
+    assert result["total_cost"] == pytest.approx(3737.0)

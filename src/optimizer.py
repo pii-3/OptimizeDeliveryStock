@@ -1,4 +1,5 @@
 import pandas as pd
+import pulp
 from pathlib import Path
 
 SHEET_NAMES = {
@@ -74,6 +75,69 @@ def _build_result(products_list, days_list, x_small_values, x_large_values, n_tr
     ], columns=["日付", "トラック台数"])
 
     return decision_variables_df, trucks_df
+
+
+def optimize(product_master_df, parameters_df, time_series_df, inventory_init_df):
+    inp = _prepare_inputs(product_master_df, parameters_df, time_series_df, inventory_init_df)
+    P = inp["products_list"]
+    D = inp["days_list"]
+
+    model = pulp.LpProblem("OptimizeDelivery", pulp.LpMinimize)
+
+    x_small = {(p, d): pulp.LpVariable(f"x_small_{p}_{d}", lowBound=0) for p in P for d in D}
+    x_large = {(p, d): pulp.LpVariable(f"x_large_{p}_{d}", lowBound=0) for p in P for d in D}
+    n_trucks = {d: pulp.LpVariable(f"n_trucks_{d}", lowBound=0, cat="Integer") for d in D}
+    inventory = {(p, d): pulp.LpVariable(f"inv_{p}_{d}", lowBound=0) for p in P for d in D}
+
+    model += pulp.lpSum(
+        inp["cost_per_case"][p] * x_small[(p, d)]
+        + inp["holding_cost"][p] * inventory[(p, d)]
+        for p in P for d in D
+    ) + pulp.lpSum(inp["cost_per_truck"] * n_trucks[d] for d in D)
+
+    for p in P:
+        for i, d in enumerate(D):
+            prev_inv = inp["inventory_init"][p] if i == 0 else inventory[(p, D[i - 1])]
+            model += inventory[(p, d)] == prev_inv + x_small[(p, d)] + x_large[(p, d)] - inp["shipping_forecast"][(p, d)]
+
+    for d in D:
+        model += pulp.lpSum(x_large[(p, d)] / inp["max_cases_per_truck"][p] for p in P) <= n_trucks[d]
+
+    for p in P:
+        for i, d in enumerate(D):
+            cum_arrival = pulp.lpSum(x_small[(p, D[j])] + x_large[(p, D[j])] for j in range(i + 1))
+            cum_x_bar = sum(inp["x_bar"][(p, D[j])] for j in range(i + 1))
+            model += cum_arrival >= cum_x_bar
+            model += cum_arrival <= inp["cumulative_shippable_qty"][(p, d)]
+
+    model.solve(pulp.PULP_CBC_CMD(msg=0))
+
+    status = pulp.LpStatus[model.status]
+    if status != "Optimal":
+        return {"status": status, "total_cost": None, "cost_breakdown": None, "decision_variables": None, "trucks": None}
+
+    x_small_val = {k: v.value() for k, v in x_small.items()}
+    x_large_val = {k: v.value() for k, v in x_large.items()}
+    n_trucks_val = {k: v.value() for k, v in n_trucks.items()}
+    inv_val = {k: v.value() for k, v in inventory.items()}
+
+    delivery_small = sum(inp["cost_per_case"][p] * x_small_val[(p, d)] for p in P for d in D)
+    delivery_large = sum(inp["cost_per_truck"] * n_trucks_val[d] for d in D)
+    holding = sum(inp["holding_cost"][p] * inv_val[(p, d)] for p in P for d in D)
+
+    decision_variables_df, trucks_df = _build_result(P, D, x_small_val, x_large_val, n_trucks_val, inv_val)
+
+    return {
+        "status": "Optimal",
+        "total_cost": float(delivery_small + delivery_large + holding),
+        "cost_breakdown": {
+            "delivery_small": float(delivery_small),
+            "delivery_large": float(delivery_large),
+            "holding": float(holding),
+        },
+        "decision_variables": decision_variables_df,
+        "trucks": trucks_df,
+    }
 
 
 def load_excel(excel_path):
