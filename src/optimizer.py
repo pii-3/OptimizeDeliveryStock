@@ -174,6 +174,68 @@ def calculate_baseline(product_master_df, parameters_df, time_series_df, invento
     }
 
 
+def optimize_fixed_order(product_master_df, parameters_df, time_series_df, inventory_init_df):
+    inp = _prepare_inputs(product_master_df, parameters_df, time_series_df, inventory_init_df)
+    P = inp["products_list"]
+    D = inp["days_list"]
+
+    # 在庫は x_bar から一意に決まる（変数不要）
+    inv_val = {}
+    for p in P:
+        prev = inp["inventory_init"][p]
+        for d in D:
+            inv_val[(p, d)] = prev + inp["x_bar"][(p, d)] - inp["shipping_forecast"][(p, d)]
+            prev = inv_val[(p, d)]
+
+    holding_cost_total = sum(inp["holding_cost"][p] * inv_val[(p, d)] for p in P for d in D)
+
+    model = pulp.LpProblem("OptimizeFixedOrder", pulp.LpMinimize)
+
+    x_small = {(p, d): pulp.LpVariable(f"x_small_{p}_{d}", lowBound=0) for p in P for d in D}
+    x_large = {(p, d): pulp.LpVariable(f"x_large_{p}_{d}", lowBound=0) for p in P for d in D}
+    n_trucks = {d: pulp.LpVariable(f"n_trucks_{d}", lowBound=0, cat="Integer") for d in D}
+
+    model += (
+        pulp.lpSum(inp["cost_per_case"][p] * x_small[(p, d)] for p in P for d in D)
+        + pulp.lpSum(inp["cost_per_truck"] * n_trucks[d] for d in D)
+        + holding_cost_total
+    )
+
+    for p in P:
+        for d in D:
+            model += x_small[(p, d)] + x_large[(p, d)] == inp["x_bar"][(p, d)]
+
+    for d in D:
+        model += pulp.lpSum(x_large[(p, d)] / inp["max_cases_per_truck"][p] for p in P) <= n_trucks[d]
+
+    model.solve(pulp.PULP_CBC_CMD(msg=0))
+
+    status = pulp.LpStatus[model.status]
+    if status != "Optimal":
+        return {"status": status, "total_cost": None, "cost_breakdown": None, "decision_variables": None, "trucks": None}
+
+    x_small_val = {k: v.value() for k, v in x_small.items()}
+    x_large_val = {k: v.value() for k, v in x_large.items()}
+    n_trucks_val = {k: v.value() for k, v in n_trucks.items()}
+
+    delivery_small = sum(inp["cost_per_case"][p] * x_small_val[(p, d)] for p in P for d in D)
+    delivery_large = sum(inp["cost_per_truck"] * n_trucks_val[d] for d in D)
+
+    decision_variables_df, trucks_df = _build_result(P, D, x_small_val, x_large_val, n_trucks_val, inv_val)
+
+    return {
+        "status": "Optimal",
+        "total_cost": float(delivery_small + delivery_large + holding_cost_total),
+        "cost_breakdown": {
+            "delivery_small": float(delivery_small),
+            "delivery_large": float(delivery_large),
+            "holding": float(holding_cost_total),
+        },
+        "decision_variables": decision_variables_df,
+        "trucks": trucks_df,
+    }
+
+
 def load_excel(excel_path):
     with pd.ExcelFile(Path(excel_path)) as xlsx:
         for sheet_name in SHEET_NAMES:

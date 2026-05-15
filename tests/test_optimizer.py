@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from optimizer import load_excel, _prepare_inputs, _build_result, optimize, calculate_baseline
+from optimizer import load_excel, _prepare_inputs, _build_result, optimize, calculate_baseline, optimize_fixed_order
 
 
 # ── O-2: Excel ローダー ────────────────────────────────────────────
@@ -341,4 +341,51 @@ def test_O5_5_cost_value(sample_dfs):
 
     # delivery_large = 0、total = delivery_small(3700) + holding(37) = 3737.0
     assert result["cost_breakdown"]["delivery_large"] == pytest.approx(0.0)
+    assert result["total_cost"] == pytest.approx(3737.0)
+
+
+# ── O-6: optimize_fixed_order ─────────────────────────────────────
+
+
+def test_O6_1_returns_optimal_status(sample_dfs):
+    result = optimize_fixed_order(*sample_dfs)
+
+    assert result["status"] == "Optimal"
+
+
+def test_O6_2_output_schema(sample_dfs):
+    result = optimize_fixed_order(*sample_dfs)
+
+    assert set(result.keys()) == {"status", "total_cost", "cost_breakdown", "decision_variables", "trucks"}
+    assert isinstance(result["total_cost"], float)
+    assert set(result["cost_breakdown"].keys()) == {"delivery_small", "delivery_large", "holding"}
+    assert isinstance(result["decision_variables"], pd.DataFrame)
+    assert isinstance(result["trucks"], pd.DataFrame)
+
+
+def test_O6_3_total_arrival_equals_x_bar(sample_dfs):
+    product_master, parameters, time_series, inventory_init = sample_dfs
+    result = optimize_fixed_order(product_master, parameters, time_series, inventory_init)
+    dv = result["decision_variables"]
+
+    x_bar = time_series.set_index(["商品コード", "日付"])["入荷予定"].to_dict()
+    for _, row in dv.iterrows():
+        assert row["入荷数合計"] == pytest.approx(x_bar[(row["商品コード"], row["日付"])], abs=1e-6)
+
+
+def test_O6_4_prefers_trucks_when_cheaper(dfs_forcing_trucks):
+    # ケース単価 500 >> トラック単価 20 → x_large = 10、n_trucks = 2、total_cost = 200
+    result = optimize_fixed_order(*dfs_forcing_trucks)
+    dv = result["decision_variables"]
+
+    d = pd.Timestamp("2024-01-01")
+    x_large = dv.loc[(dv["日付"] == d) & (dv["商品コード"] == "T"), "大口入荷数"].values[0]
+    assert x_large > 0
+    assert result["total_cost"] == pytest.approx(200.0)
+
+
+def test_O6_5_cost_value(sample_dfs):
+    result = optimize_fixed_order(*sample_dfs)
+
+    # sample_dfs はトラック不利 → x_small = x_bar → total_cost = 3737.0
     assert result["total_cost"] == pytest.approx(3737.0)
