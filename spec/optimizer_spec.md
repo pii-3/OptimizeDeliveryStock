@@ -85,18 +85,21 @@ $$\sum_{\tau=1}^{d} (x_{p,\tau}^{(s)} + x_{p,\tau}^{(l)}) \le S_{p,d}^{cum} \qua
 **出力**: dict
 ```python
 {
-    "products_list": list,           # ソート済み商品コードリスト
+    "products_list": list,           # ソート済み商品コードリスト（時系列データに存在する商品のみ）
     "days_list": list,               # ソート済み日付リスト
     "holding_cost": dict,            # {商品コード: h_p}
     "cost_per_case": dict,           # {商品コード: c_p^s}
     "cost_per_truck": float,         # C^l
     "max_cases_per_truck": dict,     # {商品コード: K_p}
-    "x_bar": dict,                   # {(商品コード, 日付): ベース入荷予定}
-    "shipping_forecast": dict,       # {(商品コード, 日付): 出荷予測}
+    "x_bar": dict,                   # {(商品コード, 日付): ベース入荷予定}（欠損は 0）
+    "shipping_forecast": dict,       # {(商品コード, 日付): 出荷予測}（欠損は 0）
     "inventory_init": dict,          # {商品コード: 前日末在庫}
     "cumulative_shippable_qty": dict, # {(商品コード, 日付): 出荷可能数累計}
 }
 ```
+
+> **注意**: `products_list` は商品マスタではなく時系列データに存在する商品コードから生成する。
+> 商品マスタにあっても時系列データに存在しない商品は計算対象外となる。
 
 **実装ファイル**: `optimizer.py:_prepare_inputs()`
 

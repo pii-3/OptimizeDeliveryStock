@@ -1,4 +1,6 @@
 import io
+import matplotlib
+matplotlib.use("Agg")
 import streamlit as st
 import pandas as pd
 from optimizer import load_excel, optimize, calculate_baseline, optimize_fixed_order
@@ -77,14 +79,22 @@ st.title("入荷最適化")
 uploaded_file = st.file_uploader("Excelファイルをアップロード", type=["xlsx"])
 
 if uploaded_file is not None:
-    try:
-        dfs = load_excel(uploaded_file)
-    except ValueError as e:
-        st.error(str(e))
-        st.stop()
-    except Exception as e:
-        st.error(f"ファイルの読み込みに失敗しました: {e}")
-        st.stop()
+    # getvalue() でバッファ位置に依らず全バイトを取得し、毎回フレッシュな BytesIO を渡す
+    file_id = uploaded_file.file_id
+    if st.session_state.get("_file_id") != file_id:
+        try:
+            dfs = load_excel(io.BytesIO(uploaded_file.getvalue()))
+            st.session_state["_dfs"] = dfs
+            st.session_state["_file_id"] = file_id
+            st.session_state.pop("result", None)
+        except ValueError as e:
+            st.error(str(e))
+            st.stop()
+        except Exception as e:
+            st.error(f"ファイルの読み込みに失敗しました: {e}")
+            st.stop()
+
+    dfs = st.session_state["_dfs"]
 
     col1, col2, col3 = st.columns(3)
     run_baseline = col1.button("すべて小口で配送")

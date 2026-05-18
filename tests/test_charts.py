@@ -28,9 +28,9 @@ def test_C1_1_returns_figure(sample_dv):
     plt.close(fig)
 
 
-def test_C1_2_has_two_axes(sample_dv):
+def test_C1_2_has_one_axis(sample_dv):
     fig = plot_order_and_inventory_all(sample_dv)
-    assert len(fig.axes) == 2  # primary + twin
+    assert len(fig.axes) == 1
     plt.close(fig)
 
 
@@ -52,14 +52,13 @@ def test_C2_1_returns_figure(sample_dv):
 def test_C2_2_subplot_count(sample_dv):
     fig = plot_order_and_inventory_by_product(sample_dv)
     n_products = sample_dv["商品コード"].nunique()
-    assert len(fig.axes) == n_products * 2  # primary + twin per product
+    assert len(fig.axes) == n_products
     plt.close(fig)
 
 
 def test_C2_3_subplot_titles(sample_dv):
     fig = plot_order_and_inventory_by_product(sample_dv)
     products = sorted(sample_dv["商品コード"].unique())
-    primary_axes = fig.axes[:len(products)]
-    for ax, p in zip(primary_axes, products):
+    for ax, p in zip(fig.axes, products):
         assert p in ax.get_title()
     plt.close(fig)

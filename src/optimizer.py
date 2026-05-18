@@ -39,14 +39,14 @@ def _prepare_inputs(product_master_df, parameters_df, time_series_df, inventory_
     inv = inventory_init_df.set_index("商品コード")
 
     return {
-        "products_list": sorted(pm.index.tolist()),
+        "products_list": sorted(time_series_df["商品コード"].unique().tolist()),
         "days_list": sorted(time_series_df["日付"].unique().tolist()),
         "holding_cost": pm["在庫コスト"].to_dict(),
         "cost_per_case": pm["配送費_ケース"].to_dict(),
         "cost_per_truck": float(truck_cost_rows.iloc[0]),
         "max_cases_per_truck": pm["CS/車両"].to_dict(),
-        "x_bar": ts["入荷予定"].to_dict(),
-        "shipping_forecast": ts["出荷予測"].to_dict(),
+        "x_bar": ts["入荷予定"].fillna(0).to_dict(),
+        "shipping_forecast": ts["出荷予測"].fillna(0).to_dict(),
         "inventory_init": inv["前日末在庫"].to_dict(),
         "cumulative_shippable_qty": ts["出荷可能数累計"].to_dict(),
     }
@@ -116,10 +116,14 @@ def optimize(product_master_df, parameters_df, time_series_df, inventory_init_df
     if status != "Optimal":
         return {"status": status, "total_cost": None, "cost_breakdown": None, "decision_variables": None, "trucks": None}
 
-    x_small_val = {k: v.value() for k, v in x_small.items()}
-    x_large_val = {k: v.value() for k, v in x_large.items()}
-    n_trucks_val = {k: v.value() for k, v in n_trucks.items()}
-    inv_val = {k: v.value() for k, v in inventory.items()}
+    def _v(var):
+        val = var.value()
+        return 0.0 if val is None else float(val)
+
+    x_small_val = {k: _v(v) for k, v in x_small.items()}
+    x_large_val = {k: _v(v) for k, v in x_large.items()}
+    n_trucks_val = {k: _v(v) for k, v in n_trucks.items()}
+    inv_val = {k: _v(v) for k, v in inventory.items()}
 
     delivery_small = sum(inp["cost_per_case"][p] * x_small_val[(p, d)] for p in P for d in D)
     delivery_large = sum(inp["cost_per_truck"] * n_trucks_val[d] for d in D)
@@ -214,9 +218,13 @@ def optimize_fixed_order(product_master_df, parameters_df, time_series_df, inven
     if status != "Optimal":
         return {"status": status, "total_cost": None, "cost_breakdown": None, "decision_variables": None, "trucks": None}
 
-    x_small_val = {k: v.value() for k, v in x_small.items()}
-    x_large_val = {k: v.value() for k, v in x_large.items()}
-    n_trucks_val = {k: v.value() for k, v in n_trucks.items()}
+    def _v(var):
+        val = var.value()
+        return 0.0 if val is None else float(val)
+
+    x_small_val = {k: _v(v) for k, v in x_small.items()}
+    x_large_val = {k: _v(v) for k, v in x_large.items()}
+    n_trucks_val = {k: _v(v) for k, v in n_trucks.items()}
 
     delivery_small = sum(inp["cost_per_case"][p] * x_small_val[(p, d)] for p in P for d in D)
     delivery_large = sum(inp["cost_per_truck"] * n_trucks_val[d] for d in D)
