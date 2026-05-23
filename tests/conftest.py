@@ -10,6 +10,7 @@ def sample_dfs():
         "在庫コスト": [2.0, 1.0],
         "配送費_ケース": [200.0, 100.0],
         "CS/車両": [40, 50],
+        "発注単位": [1, 1],
     })
     parameters = pd.DataFrame({
         "項目": ["配送費_車両"],
@@ -39,6 +40,7 @@ def sample_excel(tmp_path):
             "在庫コスト": [1.0],
             "配送費_ケース": [100.0],
             "CS/車両": [50],
+            "発注単位": [1],
         }).to_excel(writer, sheet_name="商品マスタ", index=False)
 
         pd.DataFrame({

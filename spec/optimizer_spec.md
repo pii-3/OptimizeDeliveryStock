@@ -38,6 +38,7 @@
 | $c_p^s$ | ケース配送単価 | 商品マスタ: 配送費_ケース |
 | $C^l$ | トラック1台当たり配送費 | パラメータ: 配送費_車両 |
 | $K_p$ | 満車ケース数 | 商品マスタ: CS/車両 |
+| $u_p$ | 発注単位（入荷数合計はこの整数倍のみ許容） | 商品マスタ: 発注単位 |
 
 ### 目的関数
 
@@ -63,6 +64,11 @@ $$\sum_{\tau=1}^{d} (x_{p,\tau}^{(s)} + x_{p,\tau}^{(l)}) \ge \sum_{\tau=1}^{d} 
 **4. 累積入荷数 ≤ 出荷可能数累計**
 
 $$\sum_{\tau=1}^{d} (x_{p,\tau}^{(s)} + x_{p,\tau}^{(l)}) \le S_{p,d}^{cum} \quad (p \in P, d \in D)$$
+
+**5. 発注単位制約（`optimize()` のみ）**
+
+$$x_{p,d}^{(s)} = k_{p,d}^{(s)} \cdot u_p \quad (p \in P, d \in D, \; k_{p,d}^{(s)} \in \mathbb{Z}_{\ge 0})$$
+$$x_{p,d}^{(l)} = k_{p,d}^{(l)} \cdot u_p \quad (p \in P, d \in D, \; k_{p,d}^{(l)} \in \mathbb{Z}_{\ge 0})$$
 
 ### 未実装の制約
 
@@ -95,6 +101,7 @@ $$\sum_{\tau=1}^{d} (x_{p,\tau}^{(s)} + x_{p,\tau}^{(l)}) \le S_{p,d}^{cum} \qua
     "shipping_forecast": dict,       # {(商品コード, 日付): 出荷予測}（欠損は 0）
     "inventory_init": dict,          # {商品コード: 前日末在庫}
     "cumulative_shippable_qty": dict, # {(商品コード, 日付): 出荷可能数累計}
+    "order_unit": dict,               # {商品コード: u_p}
 }
 ```
 
@@ -132,6 +139,7 @@ $$\sum_{\tau=1}^{d} (x_{p,\tau}^{(s)} + x_{p,\tau}^{(l)}) \le S_{p,d}^{cum} \qua
 - `result["cost_per_case"] == {"A": 100.0, "B": 200.0}`
 - `result["cost_per_truck"] == 30000`
 - `result["max_cases_per_truck"] == {"A": 50, "B": 40}`
+- `result["order_unit"] == {"A": 1, "B": 1}`
 
 ---
 
@@ -203,7 +211,7 @@ $$\sum_{\tau=1}^{d} (x_{p,\tau}^{(s)} + x_{p,\tau}^{(l)}) \le S_{p,d}^{cum} \qua
 
 **入力**:
 - `product_master_df`: 商品マスタ DataFrame
-  - カラム: 商品コード、在庫コスト、配送費_ケース、CS/車両
+  - カラム: 商品コード、在庫コスト、配送費_ケース、CS/車両、発注単位
 - `parameters_df`: パラメータ DataFrame
   - カラム: 項目、数量
 - `time_series_df`: 時系列データ DataFrame
@@ -415,6 +423,54 @@ $$\text{minimize} \quad \sum_{p,d} c_p^s \cdot x_{p,d}^{(s)} + \sum_{d} C^l \cdo
 **実装ファイル**: `optimizer.py:optimize_fixed_order()`
 
 **テスト**: `tests/test_optimizer.py::TestO6_*`
+
+---
+
+## 要件 O-7: 発注単位制約（optimize のみ）
+
+**目的**: 入荷数合計（小口＋大口）が商品ごとの発注単位 $u_p$ の整数倍に限定されることを保証する。
+
+**対象関数**: `optimize()` のみ（`optimize_fixed_order` や `calculate_baseline` には適用しない）
+
+**数学モデル追加**:
+- 整数変数: $k_{p,d}^{(s)}, k_{p,d}^{(l)} \ge 0 \; (k \in \mathbb{Z})$
+- 制約: $x_{p,d}^{(s)} = k_{p,d}^{(s)} \cdot u_p$、$x_{p,d}^{(l)} = k_{p,d}^{(l)} \cdot u_p \quad (\forall p, d)$
+
+**fixture** `dfs_with_order_unit`:
+- 商品 U、発注単位 = 5
+- x_bar = 7、出荷予測 = 7、出荷可能数累計 = 10、前日末在庫 = 0
+- トラック単価を非常に高く設定（小口のみ選択させる）
+
+#### test_O7_1_order_quantity_is_multiple_of_unit
+
+**目的**: 小口入荷数が発注単位の整数倍になること（トラック非常に高いので大口=0）。
+
+**検証**:
+- `result["status"] == "Optimal"`
+- `入荷数合計 == 10.0`（x_bar=7 を満たす 発注単位 5 の最小倍数は 10）
+
+**テスト**: `tests/test_optimizer.py::test_O7_1_order_quantity_is_multiple_of_unit`
+
+---
+
+**fixture** `dfs_with_order_unit_each`:
+- 商品 V、発注単位 = 5、CS/車両 = 8（トラック積載上限 8 ケース）
+- 配送費_ケース = 1、配送費_車両 = 3
+- x_bar = 10、出荷予測 = 10、出荷可能数累計 = 10、前日末在庫 = 0
+- 旧制約（合計 = 5k）では x_large=8, x_small=2 (cost=5) が最適
+- 新制約（各変数 = 5k）では (0, 10) (cost=6) が最適
+
+#### test_O7_2_each_variable_is_multiple_of_unit
+
+**目的**: 小口・大口それぞれが発注単位の整数倍になること。
+
+**検証**:
+- `result["status"] == "Optimal"`
+- `小口入荷数 % 5 == 0`
+- `大口入荷数 % 5 == 0`
+- `大口入荷数 == 10.0`（旧制約では 8 になっていた）
+
+**テスト**: `tests/test_optimizer.py::test_O7_2_each_variable_is_multiple_of_unit`
 
 ---
 

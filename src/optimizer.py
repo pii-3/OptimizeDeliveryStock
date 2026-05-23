@@ -11,7 +11,7 @@ SHEET_NAMES = {
 
 
 _REQUIRED_COLUMNS = {
-    "product_master": ["商品コード", "在庫コスト", "配送費_ケース", "CS/車両"],
+    "product_master": ["商品コード", "在庫コスト", "配送費_ケース", "CS/車両", "発注単位"],
     "parameters": ["項目", "数量"],
     "time_series": ["商品コード", "日付", "入荷予定", "出荷予測", "出荷可能数累計"],
     "inventory_init": ["商品コード", "前日末在庫"],
@@ -45,6 +45,7 @@ def _prepare_inputs(product_master_df, parameters_df, time_series_df, inventory_
         "cost_per_case": pm["配送費_ケース"].to_dict(),
         "cost_per_truck": float(truck_cost_rows.iloc[0]),
         "max_cases_per_truck": pm["CS/車両"].to_dict(),
+        "order_unit": pm["発注単位"].to_dict(),
         "x_bar": ts["入荷予定"].fillna(0).to_dict(),
         "shipping_forecast": ts["出荷予測"].fillna(0).to_dict(),
         "inventory_init": inv["前日末在庫"].to_dict(),
@@ -88,6 +89,8 @@ def optimize(product_master_df, parameters_df, time_series_df, inventory_init_df
     x_large = {(p, d): pulp.LpVariable(f"x_large_{p}_{d}", lowBound=0) for p in P for d in D}
     n_trucks = {d: pulp.LpVariable(f"n_trucks_{d}", lowBound=0, cat="Integer") for d in D}
     inventory = {(p, d): pulp.LpVariable(f"inv_{p}_{d}", lowBound=0) for p in P for d in D}
+    k_small = {(p, d): pulp.LpVariable(f"k_small_{p}_{d}", lowBound=0, cat="Integer") for p in P for d in D}
+    k_large = {(p, d): pulp.LpVariable(f"k_large_{p}_{d}", lowBound=0, cat="Integer") for p in P for d in D}
 
     model += pulp.lpSum(
         inp["cost_per_case"][p] * x_small[(p, d)]
@@ -99,6 +102,11 @@ def optimize(product_master_df, parameters_df, time_series_df, inventory_init_df
         for i, d in enumerate(D):
             prev_inv = inp["inventory_init"][p] if i == 0 else inventory[(p, D[i - 1])]
             model += inventory[(p, d)] == prev_inv + x_small[(p, d)] + x_large[(p, d)] - inp["shipping_forecast"][(p, d)]
+
+    for p in P:
+        for d in D:
+            model += x_small[(p, d)] == k_small[(p, d)] * inp["order_unit"][p]
+            model += x_large[(p, d)] == k_large[(p, d)] * inp["order_unit"][p]
 
     for d in D:
         model += pulp.lpSum(x_large[(p, d)] / inp["max_cases_per_truck"][p] for p in P) <= n_trucks[d]

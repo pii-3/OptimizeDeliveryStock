@@ -51,6 +51,7 @@ def test_PI_2_costs_extracted_correctly(sample_dfs):
     assert result["cost_per_case"] == {"A": 100.0, "B": 200.0}
     assert result["cost_per_truck"] == 30000
     assert result["max_cases_per_truck"] == {"A": 50, "B": 40}
+    assert result["order_unit"] == {"A": 1, "B": 1}
 
 
 def test_PI_3_time_series_keyed_by_product_date(sample_dfs):
@@ -201,7 +202,7 @@ def test_O1_5_optimal_cost_value(sample_dfs):
 def dfs_forcing_trucks():
     # ケース単価 500 >> トラック単価 100/5=20 → 最適解は大口入荷を選ぶ
     return (
-        pd.DataFrame({"商品コード": ["T"], "在庫コスト": [0.0], "配送費_ケース": [500.0], "CS/車両": [5]}),
+        pd.DataFrame({"商品コード": ["T"], "在庫コスト": [0.0], "配送費_ケース": [500.0], "CS/車両": [5], "発注単位": [1]}),
         pd.DataFrame({"項目": ["配送費_車両"], "数量": [100]}),
         pd.DataFrame({"商品コード": ["T"], "日付": [pd.Timestamp("2024-01-01")],
                       "入荷予定": [10], "出荷予測": [0], "出荷可能数累計": [10]}),
@@ -248,7 +249,7 @@ def test_O3_2_truck_capacity(dfs_forcing_trucks):
 def dfs_infeasible():
     # x_bar=10 > cumulative_shippable=5 → 累積制約が矛盾して実行不可能
     return (
-        pd.DataFrame({"商品コード": ["X"], "在庫コスト": [1.0], "配送費_ケース": [100.0], "CS/車両": [10]}),
+        pd.DataFrame({"商品コード": ["X"], "在庫コスト": [1.0], "配送費_ケース": [100.0], "CS/車両": [10], "発注単位": [1]}),
         pd.DataFrame({"項目": ["配送費_車両"], "数量": [1000]}),
         pd.DataFrame({"商品コード": ["X"], "日付": [pd.Timestamp("2024-01-01")],
                       "入荷予定": [10], "出荷予測": [5], "出荷可能数累計": [5]}),
@@ -389,3 +390,65 @@ def test_O6_5_cost_value(sample_dfs):
 
     # sample_dfs はトラック不利 → x_small = x_bar → total_cost = 3737.0
     assert result["total_cost"] == pytest.approx(3737.0)
+
+
+# ── O-7: 発注単位制約 ──────────────────────────────────────────────
+
+
+@pytest.fixture
+def dfs_with_order_unit():
+    # 発注単位=5、x_bar=7、出荷=7、在庫初期=0
+    # → 在庫非負を維持できる最小の発注単位倍数 = 10（5 では在庫が負）
+    return (
+        pd.DataFrame({"商品コード": ["U"], "在庫コスト": [0.0], "配送費_ケース": [100.0], "CS/車両": [50], "発注単位": [5]}),
+        pd.DataFrame({"項目": ["配送費_車両"], "数量": [99999]}),
+        pd.DataFrame({
+            "商品コード": ["U"],
+            "日付": [pd.Timestamp("2024-01-01")],
+            "入荷予定": [7],
+            "出荷予測": [7],
+            "出荷可能数累計": [10],
+        }),
+        pd.DataFrame({"商品コード": ["U"], "前日末在庫": [0]}),
+    )
+
+
+def test_O7_1_order_quantity_is_multiple_of_unit(dfs_with_order_unit):
+    result = optimize(*dfs_with_order_unit)
+
+    assert result["status"] == "Optimal"
+    dv = result["decision_variables"]
+    assert dv.iloc[0]["入荷数合計"] == pytest.approx(10.0)
+
+
+@pytest.fixture
+def dfs_with_order_unit_each():
+    # order_unit=5, K_p=8 (truck holds 8), case_cost=1, truck_cost=3
+    # Old constraint (sum=5k): x_large=8, x_small=2 (1 truck + 2 cases = cost 5) is optimal
+    # New constraint (each=5k): x_large must be 0/5/10 → x_large=10 (2 trucks, cost=6) is optimal
+    return (
+        pd.DataFrame({"商品コード": ["V"], "在庫コスト": [0.0], "配送費_ケース": [1.0], "CS/車両": [8], "発注単位": [5]}),
+        pd.DataFrame({"項目": ["配送費_車両"], "数量": [3]}),
+        pd.DataFrame({
+            "商品コード": ["V"],
+            "日付": [pd.Timestamp("2024-01-01")],
+            "入荷予定": [10],
+            "出荷予測": [10],
+            "出荷可能数累計": [10],
+        }),
+        pd.DataFrame({"商品コード": ["V"], "前日末在庫": [0]}),
+    )
+
+
+def test_O7_2_each_variable_is_multiple_of_unit(dfs_with_order_unit_each):
+    result = optimize(*dfs_with_order_unit_each)
+
+    assert result["status"] == "Optimal"
+    dv = result["decision_variables"]
+    row = dv.iloc[0]
+    assert row["小口入荷数"] % 5 == pytest.approx(0.0, abs=1e-6)
+    assert row["大口入荷数"] % 5 == pytest.approx(0.0, abs=1e-6)
+    # 旧制約では x_large=8 (多く積める1台) が最適になるが、
+    # 新制約では 5 の倍数のみ許容 → x_large=10 (2台) が最適
+    assert row["大口入荷数"] == pytest.approx(10.0)
+    assert row["小口入荷数"] == pytest.approx(0.0)
